@@ -8,6 +8,13 @@ script = ExtResource("1_8sccg")
 [node name="HelpLabel" type="Label" parent="."]
 offset_left = 16.0
 offset_top = 16.0
-offset_right = 290.0
-offset_bottom = 56.0
-text = "Move: Arrow Keys / WASD\nReset Position: R"
+offset_right = 330.0
+offset_bottom = 72.0
+text = "Move: Arrow Keys / WASD\nCollect: Yellow orb\nReset Run: R"
+
+[node name="ScoreLabel" type="Label" parent="."]
+offset_left = 16.0
+offset_top = 84.0
+offset_right = 180.0
+offset_bottom = 112.0
+text = "Score: 0"
