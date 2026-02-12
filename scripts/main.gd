@@ -50,25 +50,55 @@ func _reset_run() -> void:
 	_spawn_collectible()
 
 func _is_collectible_overlapping_player(candidate_pos: Vector2) -> bool:
+	return _collectible_clearance(candidate_pos) <= 0.0
+
+func _collectible_clearance(candidate_pos: Vector2) -> float:
 	var player_rect := Rect2(player_position, PLAYER_SIZE)
 	var closest_x := clamp(candidate_pos.x, player_rect.position.x, player_rect.end.x)
 	var closest_y := clamp(candidate_pos.y, player_rect.position.y, player_rect.end.y)
 	var closest_point := Vector2(closest_x, closest_y)
-	return closest_point.distance_to(candidate_pos) <= COLLECTIBLE_RADIUS
+	return closest_point.distance_to(candidate_pos) - COLLECTIBLE_RADIUS
 
 func _spawn_collectible() -> void:
 	var viewport_size := get_viewport_rect().size
+	var min_x := COLLECTIBLE_RADIUS
+	var min_y := COLLECTIBLE_RADIUS
+	var max_x := max(COLLECTIBLE_RADIUS, viewport_size.x - COLLECTIBLE_RADIUS)
+	var max_y := max(COLLECTIBLE_RADIUS, viewport_size.y - COLLECTIBLE_RADIUS)
 	var candidate := Vector2.ZERO
+	var best_candidate := Vector2(min_x, min_y)
+	var best_clearance := -INF
 	var max_attempts := 10
 	for i in range(max_attempts):
 		candidate = Vector2(
-			rng.randf_range(COLLECTIBLE_RADIUS, viewport_size.x - COLLECTIBLE_RADIUS),
-			rng.randf_range(COLLECTIBLE_RADIUS, viewport_size.y - COLLECTIBLE_RADIUS)
+			rng.randf_range(min_x, max_x),
+			rng.randf_range(min_y, max_y)
 		)
-		if not _is_collectible_overlapping_player(candidate):
+		var clearance := _collectible_clearance(candidate)
+		if clearance > best_clearance:
+			best_clearance = clearance
+			best_candidate = candidate
+		if clearance > 0.0:
 			collectible_position = candidate
 			return
-	collectible_position = candidate
+
+	var fallback_points := [
+		Vector2(min_x, min_y),
+		Vector2(max_x, min_y),
+		Vector2(min_x, max_y),
+		Vector2(max_x, max_y),
+		Vector2((min_x + max_x) * 0.5, min_y),
+		Vector2((min_x + max_x) * 0.5, max_y),
+		Vector2(min_x, (min_y + max_y) * 0.5),
+		Vector2(max_x, (min_y + max_y) * 0.5),
+		Vector2((min_x + max_x) * 0.5, (min_y + max_y) * 0.5)
+	]
+	for fallback_point in fallback_points:
+		if _collectible_clearance(fallback_point) > 0.0:
+			collectible_position = fallback_point
+			return
+
+	collectible_position = best_candidate
 
 func _is_collectible_collected() -> bool:
 	return _is_collectible_overlapping_player(collectible_position)
