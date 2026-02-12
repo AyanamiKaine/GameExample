@@ -4,16 +4,24 @@ extends Node2D
 
 const PLAYER_SIZE := Vector2(32.0, 32.0)
 const PLAYER_COLOR := Color(0.2, 0.9, 0.6)
+const BOOSTED_PLAYER_COLOR := Color(0.4, 1.0, 0.9)
 const COLLECTIBLE_RADIUS := 10.0
 const COLLECTIBLE_COLOR := Color(1.0, 0.8, 0.2)
+const BOOST_RADIUS := 12.0
+const BOOST_COLOR := Color(0.25, 0.75, 1.0)
+const BOOST_DURATION := 3.0
+const BOOST_MULTIPLIER := 1.8
 
 var start_position := Vector2(100.0, 100.0)
 var player_position := Vector2(100.0, 100.0)
 var collectible_position := Vector2.ZERO
+var boost_position := Vector2.ZERO
 var score := 0
+var boost_time_left := 0.0
 var rng := RandomNumberGenerator.new()
 
 @onready var score_label: Label = $ScoreLabel
+@onready var boost_label: Label = $BoostLabel
 
 func _ready() -> void:
 	rng.randomize()
@@ -21,9 +29,16 @@ func _ready() -> void:
 	queue_redraw()
 
 func _process(delta: float) -> void:
+	if boost_time_left > 0.0:
+		boost_time_left = max(0.0, boost_time_left - delta)
+
+	var current_speed := speed
+	if boost_time_left > 0.0:
+		current_speed *= BOOST_MULTIPLIER
+
 	var direction := Input.get_vector("ui_left", "ui_right", "ui_up", "ui_down")
 	if direction != Vector2.ZERO:
-		player_position += direction * speed * delta
+		player_position += direction * current_speed * delta
 
 	if Input.is_action_just_pressed("reset_player"):
 		_reset_run()
@@ -37,27 +52,42 @@ func _process(delta: float) -> void:
 		_update_score_label()
 		_spawn_collectible()
 
+	if _is_boost_collected():
+		boost_time_left = BOOST_DURATION
+		_spawn_boost()
+
+	_update_boost_label()
 	queue_redraw()
 
 func _draw() -> void:
-	draw_rect(Rect2(player_position, PLAYER_SIZE), PLAYER_COLOR)
+	var player_color := PLAYER_COLOR
+	if boost_time_left > 0.0:
+		player_color = BOOSTED_PLAYER_COLOR
+	draw_rect(Rect2(player_position, PLAYER_SIZE), player_color)
 	draw_circle(collectible_position, COLLECTIBLE_RADIUS, COLLECTIBLE_COLOR)
+	draw_circle(boost_position, BOOST_RADIUS, BOOST_COLOR)
 
 func _reset_run() -> void:
 	player_position = start_position
 	score = 0
+	boost_time_left = 0.0
 	_update_score_label()
 	_spawn_collectible()
+	_spawn_boost()
+	_update_boost_label()
 
 func _is_collectible_overlapping_player(candidate_pos: Vector2) -> bool:
-	return _collectible_clearance(candidate_pos) <= 0.0
+	return _circle_clearance_from_player(candidate_pos, COLLECTIBLE_RADIUS) <= 0.0
 
-func _collectible_clearance(candidate_pos: Vector2) -> float:
+func _circle_clearance_from_player(candidate_pos: Vector2, circle_radius: float) -> float:
 	var player_rect := Rect2(player_position, PLAYER_SIZE)
 	var closest_x: float = clamp(candidate_pos.x, player_rect.position.x, player_rect.end.x)
 	var closest_y: float = clamp(candidate_pos.y, player_rect.position.y, player_rect.end.y)
 	var closest_point := Vector2(closest_x, closest_y)
-	return closest_point.distance_to(candidate_pos) - COLLECTIBLE_RADIUS
+	return closest_point.distance_to(candidate_pos) - circle_radius
+
+func _collectible_clearance(candidate_pos: Vector2) -> float:
+	return _circle_clearance_from_player(candidate_pos, COLLECTIBLE_RADIUS)
 
 func _spawn_collectible() -> void:
 	var viewport_size := get_viewport_rect().size
@@ -103,5 +133,36 @@ func _spawn_collectible() -> void:
 func _is_collectible_collected() -> bool:
 	return _is_collectible_overlapping_player(collectible_position)
 
+func _is_boost_collected() -> bool:
+	return _circle_clearance_from_player(boost_position, BOOST_RADIUS) <= 0.0
+
+func _spawn_boost() -> void:
+	var viewport_size := get_viewport_rect().size
+	var min_x: float = BOOST_RADIUS
+	var min_y: float = BOOST_RADIUS
+	var max_x: float = max(BOOST_RADIUS, viewport_size.x - BOOST_RADIUS)
+	var max_y: float = max(BOOST_RADIUS, viewport_size.y - BOOST_RADIUS)
+	var candidate := Vector2.ZERO
+	var min_distance_from_collectible: float = BOOST_RADIUS + COLLECTIBLE_RADIUS + 24.0
+	var max_attempts := 20
+	for i in range(max_attempts):
+		candidate = Vector2(
+			rng.randf_range(min_x, max_x),
+			rng.randf_range(min_y, max_y)
+		)
+		if _circle_clearance_from_player(candidate, BOOST_RADIUS) <= 0.0:
+			continue
+		if candidate.distance_to(collectible_position) < min_distance_from_collectible:
+			continue
+		boost_position = candidate
+		return
+	boost_position = candidate
+
 func _update_score_label() -> void:
 	score_label.text = "Score: %d" % score
+
+func _update_boost_label() -> void:
+	if boost_time_left > 0.0:
+		boost_label.text = "Boost: %.1fs" % boost_time_left
+	else:
+		boost_label.text = "Boost: ready"
